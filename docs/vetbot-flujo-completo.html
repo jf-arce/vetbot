@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>VetBot — Flujo completo end-to-end</title>
+<style>
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #faf9f6;
+    color: #2c2c2a;
+    margin: 0;
+    padding: 32px 16px 64px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    text-align: center;
+    margin: 0 0 4px;
+  }
+  p.sub {
+    text-align: center;
+    color: #5f5e5a;
+    font-size: 14px;
+    margin: 0 0 28px;
+  }
+  #diagram-wrap {
+    overflow-x: auto;
+    background: #fff;
+    border: 1px solid #e3e1d8;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  .legend {
+    max-width: 1400px;
+    margin: 20px auto 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    font-size: 13px;
+    color: #5f5e5a;
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+</style>
+</head>
+<body>
+
+<h1>VetBot — Flujo completo end-to-end</h1>
+<p class="sub">Router, clasificación de intención, triaje, agenda, alertas y procesos programados</p>
+
+<div id="diagram-wrap">
+  <pre class="mermaid">
+flowchart TD
+  A["Mensaje entrante"]:::gray --> B["Buscar / crear cliente<br/><small>por número de WhatsApp</small>"]:::teal
+  B --> C{"¿Estado de<br/>conversación pendiente?"}:::gray
+  C -->|"Sí"| D["Retoma estado pendiente<br/><small>turno, horario o seguimiento</small>"]:::coral
+  D --> T1
+  C -->|"No"| E["Clasificar intención (IA)"]:::purple
+
+  E -->|"Turno directo"| F1["wf 04"]:::teal
+  E -->|"Historial"| F2["Consulta historial<br/><small>wf 03</small>"]:::teal
+  E -->|"Síntoma"| F3["Buscar historia clínica<br/><small>de la mascota, si existe</small>"]:::coral
+  E -->|"Otro"| F4["Consejo general<br/><small>comida, baño, cuidados</small>"]:::gray
+
+  F3 --> S2["Triaje IA (Claude)<br/><small>clasifica: baja / media / alta</small>"]:::purple
+  S2 -->|"Baja / media"| S3["Consejo + turno opcional"]:::teal
+  S2 -->|"Alta"| S4["Corta y deriva a humano"]:::red
+
+  S4 --> AL1["Marca alerta en DB<br/><small>wf 08 — resumen del caso</small>"]:::red
+  AL1 --> AL2["Notifica al equipo<br/><small>WhatsApp / Telegram / email</small>"]:::red
+
+  S3 -->|"acepta"| T0["Leer horarios y config<br/><small>horarios_atencion, excepciones, turnos_a_mostrar</small>"]:::teal
+  F1 --> T0
+  T0 --> T1["Consultar disponibilidad<br/><small>Google Calendar — wf 04</small>"]:::teal
+  T1 --> T2["Cliente elige horario<br/><small>respuesta por WhatsApp</small>"]:::gray
+  T2 --> T2b{"Confirma turno?<br/><small>fecha y hora explícitas</small>"}:::gray
+  T2b -->|"Sí"| T3["Crear turno<br/><small>Calendar + DB — wf 05</small>"]:::purple
+  T2b -->|"No / no matchea"| T2c["Cancela, resetea estado"]:::gray
+
+  T3 --> P1["Turno atendido"]:::gray
+  P1 --> P2["Seguimiento 48hs<br/><small>wf 06 — pregunta evolución</small>"]:::teal
+
+  CRON["Cron diario 9am"]:::gray --> P3["Recordatorios<br/><small>wf 07 — vencimientos próximos</small>"]:::teal
+
+  classDef gray fill:#F1EFE8,stroke:#888780,color:#2C2C2A;
+  classDef teal fill:#E1F5EE,stroke:#0F6E56,color:#04342C;
+  classDef purple fill:#EEEDFE,stroke:#534AB7,color:#26215C;
+  classDef coral fill:#FAECE7,stroke:#D85A30,color:#4A1B0C;
+  classDef red fill:#FCEBEB,stroke:#A32D2D,color:#501313;
+  </pre>
+</div>
+
+<div class="legend">
+  <span><span class="dot" style="background:#F1EFE8;border:1px solid #888780"></span> Estructural / disparadores</span>
+  <span><span class="dot" style="background:#E1F5EE;border:1px solid #0F6E56"></span> Acción sobre DB / Calendar</span>
+  <span><span class="dot" style="background:#EEEDFE;border:1px solid #534AB7"></span> Paso con IA (Claude)</span>
+  <span><span class="dot" style="background:#FAECE7;border:1px solid #D85A30"></span> Rama de síntoma</span>
+  <span><span class="dot" style="background:#FCEBEB;border:1px solid #A32D2D"></span> Urgencia alta</span>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    flowchart: { curve: 'basis', nodeSpacing: 40, rankSpacing: 55 },
+    themeVariables: {
+      fontFamily: '-apple-system, "Segoe UI", Roboto, sans-serif',
+      fontSize: '14px'
+    }
+  });
+</script>
+
+</body>
+</html>
