@@ -1,0 +1,45 @@
+# Rutas excluidas de las búsquedas de herramientas (ripgrep, Claude Code, etc.).
+# Objetivo: que un grep sobre el repo devuelva SOLO código nuestro y no se coma
+# el contexto con dependencias, builds y datasets de skills.
+#
+# Este archivo NO afecta a git (para eso está .gitignore) ni al bundle de Vite.
+# Para incluir algo puntual, usar `rg --no-ignore <patrón>`.
+
+# Dependencias (~306 MB)
+node_modules/
+package-lock.json
+
+# Artefactos de build
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# Datasets y assets de skills de agentes (~3.7 MB de CSV/JSON)
+.agents/
+.claude/skills/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Secretos: nunca deben aparecer en un resultado de búsqueda
+.env
+.env.*
+!.env.example
+
+# Binarios y assets pesados
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.pdf
