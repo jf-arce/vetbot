@@ -1,0 +1,116 @@
+{
+  "name": "08 - Alerta Urgente",
+  "nodes": [
+    {
+      "id": "906b8a2f-5615-498e-8e97-2f939d6d9c1c",
+      "name": "Recibir Datos de Alerta",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "consulta_id", "type": "string" },
+            { "name": "mascota_id", "type": "string" },
+            { "name": "cliente_id", "type": "string" },
+            { "name": "telefono", "type": "string" },
+            { "name": "resumen_caso", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ddfbff7e-2a70-4bfa-87ef-5fb019066936",
+      "name": "Insertar Alerta",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [224, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO alertas (consulta_id, mascota_id, cliente_id, resumen_caso) VALUES ($1, $2, $3, $4) RETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$json.consulta_id, $json.mascota_id, $json.cliente_id, $json.resumen_caso] }}"
+        }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "39b205d7-8362-4475-a069-8f24aaf2625d",
+      "name": "Buscar Telefono Veterinario",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [448, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT valor AS telefono_veterinario FROM configuracion_general WHERE clave = 'telefono_veterinario'"
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "c1560b9c-8f13-46e4-9b4b-b726cf1ddec1",
+      "name": "Preparar Mensaje Alerta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [672, 0],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "texto-alerta",
+              "name": "texto",
+              "value": "={{ '🚨 ALERTA URGENTE\\nCliente: ' + $('Recibir Datos de Alerta').item.json.cliente_id + '\\nResumen del caso: ' + $('Recibir Datos de Alerta').item.json.resumen_caso + '\\nRevisar y contactar al dueño lo antes posible.' }}",
+              "type": "string"
+            },
+            {
+              "id": "telefono-destino",
+              "name": "telefono",
+              "value": "={{ $json.telefono_veterinario }}",
+              "type": "string"
+            },
+            { "id": "cliente-id-vacio", "name": "cliente_id", "value": "", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1611ca49-c810-47ef-9d7c-78fc1ebfb586",
+      "name": "Notificar al Veterinario",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [896, 0],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $json.telefono }}",
+            "texto": "={{ $json.texto }}",
+            "cliente_id": "={{ $json.cliente_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Recibir Datos de Alerta": { "main": [[{ "node": "Insertar Alerta", "type": "main", "index": 0 }]] },
+    "Insertar Alerta": { "main": [[{ "node": "Buscar Telefono Veterinario", "type": "main", "index": 0 }]] },
+    "Buscar Telefono Veterinario": { "main": [[{ "node": "Preparar Mensaje Alerta", "type": "main", "index": 0 }]] },
+    "Preparar Mensaje Alerta": { "main": [[{ "node": "Notificar al Veterinario", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "n8nWorkflowId": "6aYwJYE5eyLDA2FL",
+    "instanceUrl": "https://josefranciscoarce.app.n8n.cloud"
+  }
+}

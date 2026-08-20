@@ -1,0 +1,286 @@
+{
+  "name": "03 - Consulta de Historial",
+  "nodes": [
+    {
+      "id": "59197dc9-e4fd-47aa-8a46-418700a5f6d7",
+      "name": "Recibir Consulta de Historial",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 400],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "cliente_id", "type": "string" },
+            { "name": "telefono", "type": "string" },
+            { "name": "texto", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9d904bf6-a087-4022-ad7c-f3dcc911ffbc",
+      "name": "Buscar Estado y Mascotas",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [224, 400],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT co.estado::text AS estado, co.contexto AS contexto, COALESCE((SELECT json_agg(json_build_object('id', m.id, 'nombre', m.nombre)) FROM mascotas m WHERE m.cliente_id = $1 AND m.estado = 'vivo'), '[]'::json) AS mascotas FROM (SELECT $1::uuid AS cliente_id) c LEFT JOIN conversaciones co ON co.cliente_id = c.cliente_id",
+        "options": { "queryReplacement": "={{ [$json.cliente_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "6d91be60-8053-4538-bd66-c23c7a14a417",
+      "name": "Resolver Mascota",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 400],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst info = $input.first().json;\nconst trigger = $('Recibir Consulta de Historial').first().json;\nconst mascotas = Array.isArray(info.mascotas) ? info.mascotas : [];\nconst texto = (trigger.texto || '').trim().toLowerCase();\n\nfunction normaliza(s) {\n  return (s || '').toString().trim().toLowerCase()\n    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n}\n\nif (mascotas.length === 0) {\n  return [{ json: { accion: 'sin_mascotas', mensaje: 'No tenes mascotas registradas todavia. Cuando quieras dar de alta una, escribime.' } }];\n}\n\nif (info.estado === 'esperando_eleccion_mascota' && info.contexto && Array.isArray(info.contexto.mascotas) && info.contexto.mascotas.length > 0) {\n  const candidatas = info.contexto.mascotas;\n  const porNumero = parseInt(texto, 10);\n  let match = null;\n  if (!isNaN(porNumero) && porNumero >= 1 && porNumero <= candidatas.length) {\n    match = candidatas[porNumero - 1];\n  } else {\n    match = candidatas.find(function (m) { return normaliza(m.nombre) === normaliza(texto) || normaliza(texto).indexOf(normaliza(m.nombre)) !== -1; });\n  }\n  if (match) {\n    return [{ json: { accion: 'usar_mascota', mascota_id: match.id } }];\n  }\n  const lista = candidatas.map(function (m, i) { return (i + 1) + '. ' + m.nombre; }).join('\\n');\n  return [{ json: { accion: 'reintentar_eleccion', mensaje: 'No entendi cual mascota. Respondeme con el nombre o el numero:\\n' + lista, mascotas: candidatas } }];\n}\n\nif (mascotas.length === 1) {\n  return [{ json: { accion: 'usar_mascota', mascota_id: mascotas[0].id } }];\n}\n\nconst lista = mascotas.map(function (m, i) { return (i + 1) + '. ' + m.nombre; }).join('\\n');\nreturn [{ json: { accion: 'preguntar_cual', mensaje: 'Tenes mas de una mascota registrada. De cual queres el historial?\\n' + lista, mascotas: mascotas } }];\n"
+      }
+    },
+    {
+      "id": "0717f416-cf05-46b4-952e-3e5a1dcd4761",
+      "name": "Accion Mascota",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [672, 384],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "usar_mascota",
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.accion }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "usar_mascota" }],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "sin_mascotas",
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $json.accion }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "sin_mascotas" }],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "preguntar_o_reintentar" }
+      }
+    },
+    {
+      "id": "2a2be80c-8cec-4b6b-8073-435a56f05d7a",
+      "name": "Buscar Historial Clinico",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [896, 112],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT fecha, tipo::text AS tipo, diagnostico, tratamiento_indicado, veterinario, notas FROM historias_clinicas WHERE mascota_id = $1 ORDER BY fecha DESC LIMIT 10",
+        "options": { "queryReplacement": "={{ [$json.mascota_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "113678f2-ecc7-4a17-bf6c-91925f8dd04f",
+      "name": "Redactar Historial",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [1120, 0],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Redacta en espanol rioplatense, en un mensaje corto y calido de WhatsApp para el dueño de la mascota, un resumen legible del siguiente historial clinico (JSON, mas reciente primero). Si esta vacio, decile amablemente que todavia no hay registros cargados.\\n\\n' + JSON.stringify($input.all().map(function(i){return i.json;})) }}",
+        "hasOutputParser": false,
+        "options": { "systemMessage": "Sos el asistente de una veterinaria. Redactas resumenes de historia clinica claros, breves y calidos para el dueño de la mascota, sin jerga medica innecesaria." }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "d869e97b-48b7-4454-ad95-4239257b0d26",
+      "name": "Google Gemini - Redaccion Historial",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [1200, 224],
+      "parameters": { "modelName": "models/gemini-3.1-flash-lite", "options": { "temperature": 0.3 } },
+      "credentials": { "googlePalmApi": { "name": "Google Gemini" } }
+    },
+    {
+      "id": "b3a4d1ee-1475-4270-8282-0dbb46e8b714",
+      "name": "Preparar Respuesta Historial",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1472, 112],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-historial", "name": "texto", "value": "={{ $json.output }}", "type": "string" },
+            { "id": "telefono-historial", "name": "telefono", "value": "={{ $('Recibir Consulta de Historial').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-historial", "name": "cliente_id", "value": "={{ $('Recibir Consulta de Historial').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8771dc0b-22f8-4cc4-bbcb-45a320968064",
+      "name": "Cerrar Estado Libre",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1696, 112],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversaciones (cliente_id, estado, contexto) VALUES ($1, 'libre', '{}'::jsonb) ON CONFLICT (cliente_id) DO UPDATE SET estado = 'libre', contexto = '{}'::jsonb, update_at = now()",
+        "options": { "queryReplacement": "={{ [$json.cliente_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "eb1999a3-27b8-4710-92d9-4db779942d31",
+      "name": "Responder Historial",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1920, 112],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Preparar Respuesta Historial').item.json.telefono }}",
+            "texto": "={{ $('Preparar Respuesta Historial').item.json.texto }}",
+            "cliente_id": "={{ $('Preparar Respuesta Historial').item.json.cliente_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e2a5c03f-c479-4191-9c80-67487a0fe14a",
+      "name": "Preparar Respuesta Sin Mascotas",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [896, 400],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-sin-mascotas", "name": "texto", "value": "={{ $json.mensaje }}", "type": "string" },
+            { "id": "telefono-sin-mascotas", "name": "telefono", "value": "={{ $('Recibir Consulta de Historial').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-sin-mascotas", "name": "cliente_id", "value": "={{ $('Recibir Consulta de Historial').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5eb366d9-4ec8-49cf-9a89-7bf048ff1af5",
+      "name": "Responder Sin Mascotas",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1184, 400],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1b478171-6f1d-4759-b128-6840fd739362",
+      "name": "Guardar Eleccion Pendiente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [896, 592],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversaciones (cliente_id, estado, contexto) VALUES ($1, 'esperando_eleccion_mascota', $2::jsonb) ON CONFLICT (cliente_id) DO UPDATE SET estado = 'esperando_eleccion_mascota', contexto = $2::jsonb, update_at = now()",
+        "options": { "queryReplacement": "={{ [$('Recibir Consulta de Historial').item.json.cliente_id, JSON.stringify({ mascotas: $json.mascotas || [] })] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "823775f7-e98f-4d11-ba45-102dfada31e7",
+      "name": "Preparar Pregunta Mascota",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1184, 592],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-pregunta", "name": "texto", "value": "={{ $('Resolver Mascota').item.json.mensaje }}", "type": "string" },
+            { "id": "telefono-pregunta", "name": "telefono", "value": "={{ $('Recibir Consulta de Historial').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-pregunta", "name": "cliente_id", "value": "={{ $('Recibir Consulta de Historial').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e54b9b03-6fc4-43c7-9554-542fe8148bed",
+      "name": "Responder Pregunta Mascota",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1472, 592],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Recibir Consulta de Historial": { "main": [[{ "node": "Buscar Estado y Mascotas", "type": "main", "index": 0 }]] },
+    "Buscar Estado y Mascotas": { "main": [[{ "node": "Resolver Mascota", "type": "main", "index": 0 }]] },
+    "Resolver Mascota": { "main": [[{ "node": "Accion Mascota", "type": "main", "index": 0 }]] },
+    "Accion Mascota": {
+      "main": [
+        [{ "node": "Buscar Historial Clinico", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Respuesta Sin Mascotas", "type": "main", "index": 0 }],
+        [{ "node": "Guardar Eleccion Pendiente", "type": "main", "index": 0 }]
+      ]
+    },
+    "Buscar Historial Clinico": { "main": [[{ "node": "Redactar Historial", "type": "main", "index": 0 }]] },
+    "Redactar Historial": { "main": [[{ "node": "Preparar Respuesta Historial", "type": "main", "index": 0 }]] },
+    "Google Gemini - Redaccion Historial": { "ai_languageModel": [[{ "node": "Redactar Historial", "type": "ai_languageModel", "index": 0 }]] },
+    "Preparar Respuesta Historial": { "main": [[{ "node": "Cerrar Estado Libre", "type": "main", "index": 0 }]] },
+    "Cerrar Estado Libre": { "main": [[{ "node": "Responder Historial", "type": "main", "index": 0 }]] },
+    "Preparar Respuesta Sin Mascotas": { "main": [[{ "node": "Responder Sin Mascotas", "type": "main", "index": 0 }]] },
+    "Guardar Eleccion Pendiente": { "main": [[{ "node": "Preparar Pregunta Mascota", "type": "main", "index": 0 }]] },
+    "Preparar Pregunta Mascota": { "main": [[{ "node": "Responder Pregunta Mascota", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "n8nWorkflowId": "B5RIwuuQFPJXCXp6",
+    "instanceUrl": "https://josefranciscoarce.app.n8n.cloud"
+  }
+}

@@ -1,0 +1,302 @@
+{
+  "name": "WF04 - Ofrecer turno",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ofrecer-turno",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -48,
+        -16
+      ],
+      "id": "27385a2f-b358-4666-9372-d0752d20b513",
+      "name": "Webhook",
+      "webhookId": "d9ae1887-2c35-4dae-b6fc-73a92972c009"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "configuracion_general",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        176,
+        -176
+      ],
+      "id": "94f3272d-e3f8-4a94-9309-194dfd2fd1e6",
+      "name": "Leer configuracion_general",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "horarios_atencion",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        176,
+        0
+      ],
+      "id": "84012ff5-7708-44ca-9837-7717ce713d3f",
+      "name": "Leer horarios_atencion",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "excepciones_horario",
+        "returnAll": true
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        176,
+        160
+      ],
+      "id": "b15b12e4-0d46-43f2-9b7c-bd26a240b989",
+      "name": "Leer excepciones_horario",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        384,
+        -16
+      ],
+      "id": "7384db89-febe-4e9b-85e1-ce9457eb83eb",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "resource": "calendar",
+        "calendar": {
+          "__rl": true,
+          "value": "zentexlabs@gmail.com",
+          "mode": "list",
+          "cachedResultName": "zentexlabs@gmail.com"
+        },
+        "timeMax": "={{ $now.plus({days: 7}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        -16
+      ],
+      "id": "37efff69-b918-4f0f-a837-707e8d288393",
+      "name": "Consultar Calendar",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "d6xor6uObbmpTmLv",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Datos que vienen de los nodos anteriores ──────────────────\nconst horarios = $('Leer horarios_atencion').all().map(i => i.json);\nconst excepciones = $('Leer excepciones_horario').all().map(i => i.json);\nconst config = $('Leer configuracion_general').all().map(i => i.json);\nconst ocupados = $('Consultar Calendar').first().json.calendars;\n\n// ── Leer configuración ────────────────────────────────────────\nconst duracion = parseInt(config.find(c => c.clave === 'duracion_turno_minutos').valor);\nconst diasAnticipacion = parseInt(config.find(c => c.clave === 'dias_anticipacion').valor);\nconst turnosAMostrar = parseInt(config.find(c => c.clave === 'turnos_a_mostrar').valor);\n\n// ── Días de la semana ─────────────────────────────────────────\nconst DIAS = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];\n\n// ── Buscar slots libres ───────────────────────────────────────\nconst slots = [];\nconst ahora = new Date();\n\nfor (let d = 0; d < diasAnticipacion; d++) {\n  const fecha = new Date(ahora);\n  fecha.setDate(ahora.getDate() + d);\n  const diaNombre = DIAS[fecha.getDay()];\n  const fechaStr = fecha.toISOString().split('T')[0]; // \"2026-08-18\"\n\n  // ¿Hay excepción para este día?\n  const excepcion = excepciones.find(e => e.fecha === fechaStr);\n  if (excepcion && excepcion.cerrado) continue; // día cerrado, skip\n\n  // Horario base del día\n  const horario = horarios.find(h => h.dia_semana === diaNombre && h.activo);\n  if (!horario) continue; // día no laborable, skip\n\n  // Horario de apertura y cierre\n  const apertura = horario.hora_apertura.substring(0, 5); // \"09:00\"\n  const cierre = horario.hora_cierre.substring(0, 5);     // \"18:00\"\n\n  // Generar todos los slots del día\n  const [hAp, mAp] = apertura.split(':').map(Number);\n  const [hCi, mCi] = cierre.split(':').map(Number);\n\n  let slotInicio = new Date(fecha);\n  slotInicio.setHours(hAp, mAp, 0, 0);\n  const slotFin = new Date(fecha);\n  slotFin.setHours(hCi, mCi, 0, 0);\n\n  while (slotInicio < slotFin) {\n    const slotFinActual = new Date(slotInicio.getTime() + duracion * 60000);\n\n    // ¿El slot ya pasó?\n    if (slotInicio <= ahora) {\n      slotInicio = slotFinActual;\n      continue;\n    }\n\n    // ¿Está ocupado en Calendar?\n    const estaOcupado = Object.values(ocupados).some(cal =>\n      cal.busy.some(b => {\n        const bStart = new Date(b.start);\n        const bEnd = new Date(b.end);\n        return slotInicio < bEnd && slotFinActual > bStart;\n      })\n    );\n\n    if (!estaOcupado) {\n      slots.push({\n        inicio: slotInicio.toISOString(),\n        fin: slotFinActual.toISOString(),\n        label: slotInicio.toLocaleString('es-AR', {\n          weekday: 'long', day: 'numeric', month: 'long',\n          hour: '2-digit', minute: '2-digit'\n        })\n      });\n    }\n\n    slotInicio = slotFinActual;\n  }\n}\n\n// ── Tomar los primeros N slots ────────────────────────────────\nconst resultado = slots.slice(0, turnosAMostrar);\n\nreturn resultado.map(s => ({ json: s }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        -16
+      ],
+      "id": "6aadc3aa-539c-4c72-9c26-33b3edcefb12",
+      "name": "Calcular slots libres"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "conversaciones",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cliente_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Webhook').first().json.body.cliente_id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "estado",
+              "fieldValue": "esperando_eleccion_horario"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        -16
+      ],
+      "id": "7eabf49b-d0b6-4933-9c23-99f9c5e99e23",
+      "name": "Actualizar estado conversacion",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1280,
+        -16
+      ],
+      "id": "b25177a2-56dc-4463-ac54-c03fac64e4fe",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Leer horarios_atencion",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Leer configuracion_general",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Leer excepciones_horario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer configuracion_general": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer horarios_atencion": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Leer excepciones_horario": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Consultar Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Calendar": {
+      "main": [
+        [
+          {
+            "node": "Calcular slots libres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular slots libres": {
+      "main": [
+        [
+          {
+            "node": "Actualizar estado conversacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar estado conversacion": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "158d1d23-402a-4e2e-8b49-fc2ee6d46611",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "88095b30e46cbe9b7f66a9fb873080bcfecd7169ff5ae40e455d4f79c48be0f6"
+  },
+  "nodeGroups": [],
+  "id": "RMm9kCMmmnGCwHwf",
+  "tags": []
+}

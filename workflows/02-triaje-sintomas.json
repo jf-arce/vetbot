@@ -1,0 +1,322 @@
+{
+  "name": "02 - Triaje de Sintomas",
+  "nodes": [
+    {
+      "id": "553100b6-89e4-455c-82df-09b56e926510",
+      "name": "Recibir Datos de Triaje",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 256],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            { "name": "cliente_id", "type": "string" },
+            { "name": "telefono", "type": "string" },
+            { "name": "texto", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a836e9ed-67f5-4bc3-821a-6fdb6f5ad024",
+      "name": "Buscar Mascota y Historial",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [224, 256],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT m.id AS mascota_id, m.nombre AS mascota_nombre, m.especie::text AS especie, m.raza, m.fecha_nacimiento, m.peso, m.notas_generales, (m.id IS NOT NULL) AS tiene_mascota, COALESCE((SELECT json_agg(json_build_object('fecha', h.fecha, 'tipo', h.tipo::text, 'diagnostico', h.diagnostico, 'tratamiento', h.tratamiento_indicado) ORDER BY h.fecha DESC) FROM historias_clinicas h WHERE h.mascota_id = m.id), '[]'::json) AS historial FROM (SELECT $1::uuid AS cliente_id) c LEFT JOIN LATERAL (SELECT * FROM mascotas mm WHERE mm.cliente_id = c.cliente_id AND mm.estado = 'vivo' ORDER BY mm.created_at ASC LIMIT 1) m ON true",
+        "options": { "queryReplacement": "={{ [$json.cliente_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "826d41f8-fc52-4f30-b118-08328cf82810",
+      "name": "Tiene Mascota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [448, 256],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.tiene_mascota }}", "operator": { "type": "boolean", "operation": "equals" }, "rightValue": true }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "26d829f1-7cb7-4547-a9b5-f6a707032612",
+      "name": "Triaje de Sintomas",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [672, 0],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ 'Mensaje del dueño: ' + $('Recibir Datos de Triaje').item.json.texto + '\\n\\nDatos de la mascota: ' + JSON.stringify({ nombre: $json.mascota_nombre, especie: $json.especie, raza: $json.raza, fecha_nacimiento: $json.fecha_nacimiento, peso: $json.peso, notas: $json.notas_generales }) + '\\n\\nHistorial clinico reciente (JSON, mas reciente primero): ' + JSON.stringify($json.historial) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el asistente de triaje de una veterinaria. Clasificas el sintoma que describe el dueño en espanol rioplatense. Clasificacion posible: \"baja\" (cuidados en casa, sin urgencia), \"media\" (conviene un turno pronto pero no es una emergencia), \"alta\" (riesgo de vida o signos de alarma, requiere atencion inmediata). Ejemplos: \"vomito una vez y esta activo\" -> baja. \"diarrea hace 2 dias, come bien\" -> media. \"no puede respirar\", \"convulsion\", \"sangrado abundante\", \"no puede pararse\", \"hinchazon abdominal subita\" -> alta. Ante la duda entre dos niveles, elegi siempre el mas alto. Siempre completa los 4 campos: clasificacion, consejo (consejo practico y breve para el dueño, o el texto de derivacion si es alta), resumen_caso (resumen clinico breve en tercera persona para el registro), y razonamiento (por que elegiste esa clasificacion)."
+        }
+      }
+    },
+    {
+      "id": "9d5d7a21-4526-4abb-8cc0-6084ab9a413b",
+      "name": "Google Gemini - Triaje",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [688, 224],
+      "parameters": { "modelName": "models/gemini-3.1-flash-lite", "options": { "temperature": 0.1 } },
+      "credentials": { "googlePalmApi": { "name": "Google Gemini" } }
+    },
+    {
+      "id": "501ad14a-ae0e-4085-b488-e92ef7f36f13",
+      "name": "Parser Triaje",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [816, 224],
+      "parameters": {
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{ \"clasificacion\": \"baja\", \"consejo\": \"Manten a tu mascota hidratada y en observacion por 24hs.\", \"resumen_caso\": \"Perro macho de 4 anios con vomitos aislados desde ayer, sin otros sintomas.\", \"razonamiento\": \"Vomitos aislados sin signos de alarma en un adulto sano sugieren cuadro leve autolimitado.\" }"
+      }
+    },
+    {
+      "id": "c5b4233c-8434-49a0-8619-e2b7821a1f49",
+      "name": "Validar Clasificacion (Fail-safe)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1024, 112],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst item = $input.first().json;\nconst salida = item.output || {};\nconst validas = ['baja', 'media', 'alta'];\nlet clasificacion = salida.clasificacion;\nlet consejo = salida.consejo;\nlet resumen_caso = salida.resumen_caso;\nlet razonamiento = salida.razonamiento;\n\nif (!validas.includes(clasificacion) || !consejo || !resumen_caso) {\n  clasificacion = 'alta';\n  consejo = 'No pude evaluar el sintoma con certeza. Por las dudas, te recomiendo contactar a la veterinaria cuanto antes.';\n  resumen_caso = (resumen_caso || ('Mensaje original: ' + $('Recibir Datos de Triaje').first().json.texto)) + ' [clasificacion forzada a alta por fallo de parseo del modelo]';\n  razonamiento = razonamiento || 'La respuesta del modelo no vino en el formato esperado; se escala por seguridad.';\n}\n\nreturn [{ json: { clasificacion, consejo, resumen_caso, razonamiento } }];\n"
+      }
+    },
+    {
+      "id": "6200316d-5190-478d-9a1a-c54d8bbc8342",
+      "name": "Insertar Consulta",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1248, 112],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO consultas (mascota_id, mensaje_original, clasificacion, consejo_generado) VALUES ($1, $2, $3, $4) RETURNING id",
+        "options": { "queryReplacement": "={{ [$('Buscar Mascota y Historial').item.json.mascota_id, $('Recibir Datos de Triaje').item.json.texto, $json.clasificacion, $json.consejo] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "96fc117f-f4ab-426b-bf6c-a29c93f9a33b",
+      "name": "Nivel de Urgencia",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [1472, 112],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "alta",
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+                "conditions": [{ "leftValue": "={{ $('Validar Clasificacion (Fail-safe)').item.json.clasificacion }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "alta" }],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "baja_o_media" }
+      }
+    },
+    {
+      "id": "aa557169-1b6f-467d-8d3e-d131235630f5",
+      "name": "Preparar Mensaje Derivacion",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1696, 16],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-derivacion", "name": "texto", "value": "={{ 'Por lo que me contas, esto necesita atencion veterinaria cuanto antes. ' + $('Validar Clasificacion (Fail-safe)').item.json.consejo + ' Ya avisamos a la veterinaria para que se contacte con vos.' }}", "type": "string" },
+            { "id": "telefono-derivacion", "name": "telefono", "value": "={{ $('Recibir Datos de Triaje').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-derivacion", "name": "cliente_id", "value": "={{ $('Recibir Datos de Triaje').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a30f4e40-3741-4bd2-810a-96a97876b0af",
+      "name": "Responder Derivacion",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1920, 16],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5c9b2f19-9412-4483-9593-62fca52bae2d",
+      "name": "Disparar Alerta Urgente",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2144, 16],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "6aYwJYE5eyLDA2FL", "cachedResultName": "08 - Alerta Urgente" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "consulta_id": "={{ $('Insertar Consulta').item.json.id }}",
+            "mascota_id": "={{ $('Buscar Mascota y Historial').item.json.mascota_id }}",
+            "cliente_id": "={{ $('Recibir Datos de Triaje').item.json.cliente_id }}",
+            "telefono": "={{ $('Recibir Datos de Triaje').item.json.telefono }}",
+            "resumen_caso": "={{ $('Validar Clasificacion (Fail-safe)').item.json.resumen_caso }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "consulta_id", "displayName": "consulta_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "mascota_id", "displayName": "mascota_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "resumen_caso", "displayName": "resumen_caso", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ef1ece7b-986a-4451-a278-037bebd1256d",
+      "name": "Guardar Estado Oferta Turno",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1696, 208],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversaciones (cliente_id, estado, contexto) VALUES ($1, 'esperando_confirmacion_turno', $2::jsonb) ON CONFLICT (cliente_id) DO UPDATE SET estado = 'esperando_confirmacion_turno', contexto = $2::jsonb, update_at = now()",
+        "options": { "queryReplacement": "={{ [$('Recibir Datos de Triaje').item.json.cliente_id, JSON.stringify({ origen: 'triaje', consulta_id: $('Insertar Consulta').item.json.id, mascota_id: $('Buscar Mascota y Historial').item.json.mascota_id })] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "21c1f2f9-5c89-48ce-82bf-f95a8f1864dd",
+      "name": "Preparar Respuesta Consejo",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1920, 208],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-consejo", "name": "texto", "value": "={{ $('Validar Clasificacion (Fail-safe)').item.json.consejo + '\\n\\nSi queres, te puedo ofrecer un turno para que la vea la veterinaria. Respondeme si o no.' }}", "type": "string" },
+            { "id": "telefono-consejo", "name": "telefono", "value": "={{ $('Recibir Datos de Triaje').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-consejo", "name": "cliente_id", "value": "={{ $('Recibir Datos de Triaje').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1f0975bf-b185-4f69-9b0c-f0b29a853e50",
+      "name": "Responder Consejo",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2144, 208],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dfbaa410-e19c-4ca3-99d1-2e44af4bc328",
+      "name": "Preparar Respuesta Sin Mascota",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [736, 400],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-sin-mascota", "name": "texto", "value": "Todavia no tenes una mascota registrada, asi que no puedo evaluar el sintoma. Decime el nombre de tu mascota para darla de alta.", "type": "string" },
+            { "id": "telefono-sin-mascota", "name": "telefono", "value": "={{ $('Recibir Datos de Triaje').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-sin-mascota", "name": "cliente_id", "value": "={{ $('Recibir Datos de Triaje').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e4cfd216-d14f-4f75-85e9-7b910b85f8e7",
+      "name": "Responder Sin Mascota",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1024, 400],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Recibir Datos de Triaje": { "main": [[{ "node": "Buscar Mascota y Historial", "type": "main", "index": 0 }]] },
+    "Buscar Mascota y Historial": { "main": [[{ "node": "Tiene Mascota?", "type": "main", "index": 0 }]] },
+    "Tiene Mascota?": {
+      "main": [
+        [{ "node": "Triaje de Sintomas", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Respuesta Sin Mascota", "type": "main", "index": 0 }]
+      ]
+    },
+    "Triaje de Sintomas": { "main": [[{ "node": "Validar Clasificacion (Fail-safe)", "type": "main", "index": 0 }]] },
+    "Google Gemini - Triaje": { "ai_languageModel": [[{ "node": "Triaje de Sintomas", "type": "ai_languageModel", "index": 0 }]] },
+    "Parser Triaje": { "ai_outputParser": [[{ "node": "Triaje de Sintomas", "type": "ai_outputParser", "index": 0 }]] },
+    "Validar Clasificacion (Fail-safe)": { "main": [[{ "node": "Insertar Consulta", "type": "main", "index": 0 }]] },
+    "Insertar Consulta": { "main": [[{ "node": "Nivel de Urgencia", "type": "main", "index": 0 }]] },
+    "Nivel de Urgencia": {
+      "main": [
+        [{ "node": "Preparar Mensaje Derivacion", "type": "main", "index": 0 }],
+        [{ "node": "Guardar Estado Oferta Turno", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Mensaje Derivacion": { "main": [[{ "node": "Responder Derivacion", "type": "main", "index": 0 }]] },
+    "Responder Derivacion": { "main": [[{ "node": "Disparar Alerta Urgente", "type": "main", "index": 0 }]] },
+    "Guardar Estado Oferta Turno": { "main": [[{ "node": "Preparar Respuesta Consejo", "type": "main", "index": 0 }]] },
+    "Preparar Respuesta Consejo": { "main": [[{ "node": "Responder Consejo", "type": "main", "index": 0 }]] },
+    "Preparar Respuesta Sin Mascota": { "main": [[{ "node": "Responder Sin Mascota", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "n8nWorkflowId": "TT5XtFwwoUclp39B",
+    "instanceUrl": "https://josefranciscoarce.app.n8n.cloud"
+  }
+}

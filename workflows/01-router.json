@@ -1,0 +1,634 @@
+{
+  "name": "01 - Router",
+  "nodes": [
+    {
+      "id": "13b23568-b879-413f-8906-a03a8add05b7",
+      "name": "Webhook Evolution",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 688],
+      "parameters": { "httpMethod": "POST", "path": "vetbot-entrante", "authentication": "none", "responseMode": "onReceived", "options": {} },
+      "webhookId": "6ba5c86d-608c-4f81-852c-ba59eb31832b"
+    },
+    {
+      "id": "29bc9015-9dbf-4826-be91-89256475577e",
+      "name": "Normalizar Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [224, 688],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst body = $input.first().json.body || {};\nconst data = body.data;\nif (!data || !data.key) return [];\nif (data.key.fromMe) return [];\nconst remoteJid = data.key.remoteJid || '';\nif (remoteJid.endsWith('@g.us')) return [];\nconst texto = data.message && (data.message.conversation || (data.message.extendedTextMessage && data.message.extendedTextMessage.text));\nif (!texto) return [];\nconst telefono = remoteJid.split('@')[0];\nreturn [{ json: { telefono, texto, wa_message_id: data.key.id } }];\n"
+      }
+    },
+    {
+      "id": "0e23b8be-3091-4045-93cb-c8d13d1794ed",
+      "name": "Registrar Mensaje Entrante",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [448, 688],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO mensajes (direccion, contenido, telefono, wa_message_id) VALUES ('entrante', $1, $2, $3) ON CONFLICT (wa_message_id) WHERE wa_message_id IS NOT NULL DO NOTHING RETURNING id",
+        "options": { "queryReplacement": "={{ [$json.texto, $json.telefono, $json.wa_message_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Postgres account" } }
+    },
+    {
+      "id": "b812de87-58eb-48d9-b5b8-c4995ee863c4",
+      "name": "Buscar Cliente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [672, 688],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.telefono, t.texto, t.wa_message_id, c.id AS cliente_id, c.nombre AS cliente_nombre, (c.id IS NOT NULL) AS cliente_existe FROM (SELECT $1::text AS telefono, $2::text AS texto, $3::text AS wa_message_id) t LEFT JOIN clientes c ON c.telefono = t.telefono",
+        "options": { "queryReplacement": "={{ [$('Normalizar Mensaje').item.json.telefono, $('Normalizar Mensaje').item.json.texto, $('Normalizar Mensaje').item.json.wa_message_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "9c815a16-940c-4faa-a93b-a4759671209d",
+      "name": "Cliente Existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [896, 688],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.cliente_existe }}", "operator": { "type": "boolean", "operation": "equals" }, "rightValue": true }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c2633a30-10ac-453b-9855-7a6ecd087924",
+      "name": "Buscar Conversacion",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1120, 384],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COALESCE(co.estado::text, 'libre') AS estado, co.contexto AS contexto FROM (SELECT $1::uuid AS cliente_id) c LEFT JOIN conversaciones co ON co.cliente_id = c.cliente_id",
+        "options": { "queryReplacement": "={{ [$('Buscar Cliente').item.json.cliente_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "a9103e37-a834-4378-b689-85949810cffb",
+      "name": "Router por Estado",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [1344, 304],
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputKey": "esperando_datos_registro", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.estado }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "esperando_datos_registro" }], "combinator": "and" } },
+            { "outputKey": "esperando_eleccion_mascota", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.estado }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "esperando_eleccion_mascota" }], "combinator": "and" } },
+            { "outputKey": "esperando_confirmacion_turno", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.estado }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "esperando_confirmacion_turno" }], "combinator": "and" } },
+            { "outputKey": "esperando_eleccion_horario", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.estado }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "esperando_eleccion_horario" }], "combinator": "and" } },
+            { "outputKey": "esperando_respuesta_seguimiento", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.estado }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "esperando_respuesta_seguimiento" }], "combinator": "and" } },
+            { "outputKey": "libre", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.estado }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "libre" }], "combinator": "and" } }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "desconocido" }
+      }
+    },
+    {
+      "id": "a99df0da-0655-43a6-b858-5237cb06ea0d",
+      "name": "Procesar Paso Registro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1632, 48],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst conv = $input.first().json;\nconst cliente = $('Buscar Cliente').first().json;\nconst contexto = conv.contexto || { paso: 'nombre_dueno', datos: {} };\nconst paso = contexto.paso || 'nombre_dueno';\nconst datos = contexto.datos || {};\nconst texto = (cliente.texto || '').trim();\n\nconst SINONIMOS_ESPECIE = {\n  perro: 'perro', perrito: 'perro', can: 'perro', cachorro: 'perro', dog: 'perro',\n  gato: 'gato', gatito: 'gato', michi: 'gato', felino: 'gato', cat: 'gato',\n  hamster: 'hamster', conejo: 'conejo', tortuga: 'tortuga', pez: 'pez',\n  loro: 'loro', canario: 'canario', iguana: 'iguana', caballo: 'caballo',\n  gallina: 'gallina', pato: 'pato', cerdo: 'cerdo', oveja: 'oveja', cabra: 'cabra'\n};\nconst ESPECIES_VALIDAS = ['perro','gato','hamster','caballo','conejo','huron','cobayo','chinchilla','loro','guacamayo','periquito','canario','cacatúa','ninfas','gallina','pato','ganso','paloma','búho','tortuga','iguana','vaca','toro','cerdo','oveja','cabra','llama','alpaca','pony','burro','mula','pez'];\n\nconst SINONIMOS_SEXO = {\n  macho: 'macho', male: 'macho', varon: 'macho', m: 'macho',\n  hembra: 'hembra', female: 'hembra', f: 'hembra'\n};\n\nfunction normaliza(s) {\n  return (s || '').toString().trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\n}\n\nfunction esSaltear(s) {\n  const n = normaliza(s);\n  return n === 'no' || n === 'ninguna' || n === 'skip' || n === 'no se' || n === 'no importa';\n}\n\nlet siguientePaso = paso;\nlet mensaje = null;\nlet finalizar = false;\n\nif (paso === 'nombre_dueno') {\n  if (!texto) { mensaje = 'Decime tu nombre para continuar con el alta.'; }\n  else { datos.nombre_dueno = texto; siguientePaso = 'nombre_mascota'; mensaje = 'Gracias, ' + texto + '! Y como se llama tu mascota?'; }\n} else if (paso === 'nombre_mascota') {\n  if (!texto) { mensaje = 'Decime el nombre de tu mascota para continuar.'; }\n  else { datos.nombre_mascota = texto; siguientePaso = 'especie'; mensaje = 'Que especie es ' + texto + '? (perro, gato, etc.)'; }\n} else if (paso === 'especie') {\n  const n = normaliza(texto);\n  const match = SINONIMOS_ESPECIE[n] || (ESPECIES_VALIDAS.includes(n) ? n : null);\n  if (!match) { mensaje = 'No reconoci esa especie. Las mas comunes son: perro, gato, conejo, hamster, ave, tortuga. Cual es?'; }\n  else { datos.especie = match; siguientePaso = 'sexo'; mensaje = 'Es macho o hembra?'; }\n} else if (paso === 'sexo') {\n  const n = normaliza(texto);\n  const match = SINONIMOS_SEXO[n];\n  if (!match) { mensaje = 'No entendi. Respondeme \"macho\" o \"hembra\".'; }\n  else { datos.sexo = match; siguientePaso = 'raza'; mensaje = 'Sabes la raza? (si no sabes o no aplica, respondeme \"no\")'; }\n} else if (paso === 'raza') {\n  datos.raza = esSaltear(texto) ? null : texto;\n  finalizar = true;\n} else {\n  siguientePaso = 'nombre_dueno';\n  mensaje = 'Retomemos el alta. Decime tu nombre.';\n}\n\nif (finalizar) {\n  return [{ json: { accion: 'finalizar', datos, cliente_id: cliente.cliente_id, telefono: cliente.telefono } }];\n}\n\nreturn [{ json: { accion: 'preguntar', paso: siguientePaso, datos, mensaje, cliente_id: cliente.cliente_id, telefono: cliente.telefono } }];\n"
+      }
+    },
+    {
+      "id": "3d1c7567-40bc-4641-a999-4204651ebe78",
+      "name": "Registro Completo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1920, 48],
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "leftValue": "={{ $json.accion }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "finalizar" }],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "ce606661-4917-4371-ba0f-68f4f8cdc161",
+      "name": "Insertar Mascota",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [2144, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO mascotas (cliente_id, nombre, especie, sexo, raza) VALUES ($1, $2, $3::\"Especie\", $4::\"Sexo\", $5)",
+        "options": { "queryReplacement": "={{ [$json.cliente_id, $json.datos.nombre_mascota, $json.datos.especie, $json.datos.sexo, $json.datos.raza] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "e31661ae-8de0-4385-a880-258140a93337",
+      "name": "Actualizar Nombre Cliente",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [2368, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE clientes SET nombre = $1 WHERE id = $2",
+        "options": { "queryReplacement": "={{ [$('Procesar Paso Registro').item.json.datos.nombre_dueno, $('Procesar Paso Registro').item.json.cliente_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "c156ed6d-fbd3-450e-a752-683d628d07cf",
+      "name": "Backfill Mensajes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [2592, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE mensajes SET cliente_id = $1 WHERE telefono = $2 AND cliente_id IS NULL",
+        "options": { "queryReplacement": "={{ [$('Procesar Paso Registro').item.json.cliente_id, $('Procesar Paso Registro').item.json.telefono] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "65949804-27ad-4f44-9d56-76776f49935a",
+      "name": "Cerrar Conversacion Registro",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [2816, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversaciones (cliente_id, estado, contexto) VALUES ($1, 'libre', '{}'::jsonb) ON CONFLICT (cliente_id) DO UPDATE SET estado = 'libre', contexto = '{}'::jsonb, update_at = now()",
+        "options": { "queryReplacement": "={{ [$('Procesar Paso Registro').item.json.cliente_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "0989f68d-bcbd-4aff-98ad-d28f972a41e9",
+      "name": "Preparar Bienvenida",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [3040, 0],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-bienvenida", "name": "texto", "value": "={{ 'Listo, ' + $('Procesar Paso Registro').item.json.datos.nombre_mascota + ' ya esta registrado/a. En que te puedo ayudar? Puedo darte turno, contarte el historial clinico o ayudarte si tiene algun sintoma.' }}", "type": "string" },
+            { "id": "telefono-bienvenida", "name": "telefono", "value": "={{ $('Procesar Paso Registro').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-bienvenida", "name": "cliente_id", "value": "={{ $('Procesar Paso Registro').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a7e7dcbe-db11-45a0-94c7-4054521be5dd",
+      "name": "Responder Bienvenida",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [3264, 0],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "a6577f6a-89f5-466f-8b9f-b8b7de55fed1",
+      "name": "Actualizar Contexto Registro",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [2144, 240],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE conversaciones SET contexto = $1::jsonb, update_at = now() WHERE cliente_id = $2",
+        "options": { "queryReplacement": "={{ [JSON.stringify({ paso: $json.paso, datos: $json.datos }), $json.cliente_id] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "d8b0aff9-a4c7-4cb3-93a6-cdc452d160ca",
+      "name": "Preparar Pregunta Siguiente",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [2368, 240],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-siguiente", "name": "texto", "value": "={{ $('Procesar Paso Registro').item.json.mensaje }}", "type": "string" },
+            { "id": "telefono-siguiente", "name": "telefono", "value": "={{ $('Procesar Paso Registro').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-siguiente", "name": "cliente_id", "value": "={{ $('Procesar Paso Registro').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b51c3bfc-90ab-4c94-a198-69978f760090",
+      "name": "Responder Pregunta Siguiente",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2592, 240],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "67bb0085-b646-4f8e-bc41-b5610ecaebf7",
+      "name": "Continuar Eleccion de Mascota (wf03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1632, 240],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "B5RIwuuQFPJXCXp6", "cachedResultName": "03 - Consulta de Historial" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "cliente_id": "={{ $('Buscar Cliente').item.json.cliente_id }}", "telefono": "={{ $('Buscar Cliente').item.json.telefono }}", "texto": "={{ $('Buscar Cliente').item.json.texto }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "87c915ec-be77-4839-a6c4-0cfe3cadde70",
+      "name": "Preparar Mensaje Pendiente (Dev2)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1632, 432],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-pendiente", "name": "texto", "value": "Estamos procesando tu turno, en un momento te confirmamos. Gracias por tu paciencia!", "type": "string" },
+            { "id": "telefono-pendiente", "name": "telefono", "value": "={{ $('Buscar Cliente').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-pendiente", "name": "cliente_id", "value": "={{ $('Buscar Cliente').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "84e772f9-7834-4b81-ae06-70ec3d0c7d78",
+      "name": "Responder Pendiente (Dev2)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1920, 432],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c6b2ea01-1734-4bcf-a428-24f128007434",
+      "name": "Clasificar Intencion",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [1568, 672],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Buscar Cliente').item.json.texto }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sos el router de un bot de WhatsApp para una veterinaria, en espanol rioplatense. Clasifica el mensaje del dueño en UNA de estas 4 categorias EXACTAS: \"turno_directo\" (pide un turno o cita explicitamente, ej: \"quiero sacar un turno\", \"necesito una cita para el jueves\"), \"historia_clinica\" (pregunta por el historial medico o registros previos de su mascota, ej: \"que le hicieron la ultima vez\", \"quiero ver el historial\"), \"sintoma\" (describe un sintoma, malestar o problema de salud de su mascota, ej: \"esta vomitando\", \"no quiere comer\", \"le duele la pata\"), \"otro\" (cualquier otra cosa: saludos, preguntas administrativas, charla general). Ejemplos: \"hola\" -> otro. \"quiero un turno para el sabado\" -> turno_directo. \"que vacunas tiene puestas mi perro?\" -> historia_clinica. \"mi gato esta con diarrea\" -> sintoma. Devolve siempre intencion y razonamiento."
+        }
+      }
+    },
+    {
+      "id": "63b1af85-f23b-41d9-b323-0b846607f487",
+      "name": "Google Gemini - Intencion",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [1584, 896],
+      "parameters": { "modelName": "models/gemini-3.1-flash-lite", "options": { "temperature": 0 } },
+      "credentials": { "googlePalmApi": { "name": "Google Gemini" } }
+    },
+    {
+      "id": "c1e00c67-75f7-4ff0-b1c5-2db65823399f",
+      "name": "Parser Intencion",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [1712, 896],
+      "parameters": { "schemaType": "fromJson", "jsonSchemaExample": "{ \"intencion\": \"sintoma\", \"razonamiento\": \"El dueño describe que la mascota vomito.\" }" }
+    },
+    {
+      "id": "34dbd4dc-1579-44a1-9494-26556d9cc2ef",
+      "name": "Router por Intencion",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [1920, 752],
+      "parameters": {
+        "rules": {
+          "values": [
+            { "outputKey": "turno_directo", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.output.intencion }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "turno_directo" }], "combinator": "and" } },
+            { "outputKey": "historia_clinica", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.output.intencion }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "historia_clinica" }], "combinator": "and" } },
+            { "outputKey": "sintoma", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.output.intencion }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "sintoma" }], "combinator": "and" } }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "otro" }
+      }
+    },
+    {
+      "id": "86c9ddf2-4963-4337-84d1-240d3dc781a5",
+      "name": "Preparar Respuesta Turno Directo",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [2144, 432],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-turno", "name": "texto", "value": "Dale, en un momento te paso los horarios disponibles para que elijas.", "type": "string" },
+            { "id": "telefono-turno", "name": "telefono", "value": "={{ $('Buscar Cliente').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-turno", "name": "cliente_id", "value": "={{ $('Buscar Cliente').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4e851815-0e22-4df9-8a39-74b23f914863",
+      "name": "Responder Turno Directo",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2368, 432],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "b2e7e41c-f11c-4a45-bce7-e23e2207d0d2",
+      "name": "Consultar Historial (wf03)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2144, 624],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "B5RIwuuQFPJXCXp6", "cachedResultName": "03 - Consulta de Historial" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "cliente_id": "={{ $('Buscar Cliente').item.json.cliente_id }}", "telefono": "={{ $('Buscar Cliente').item.json.telefono }}", "texto": "={{ $('Buscar Cliente').item.json.texto }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2f8687cc-0352-4dad-945c-e57970ae2d2d",
+      "name": "Triaje de Sintomas (wf02)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2144, 880],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "TT5XtFwwoUclp39B", "cachedResultName": "02 - Triaje de Sintomas" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "cliente_id": "={{ $('Buscar Cliente').item.json.cliente_id }}", "telefono": "={{ $('Buscar Cliente').item.json.telefono }}", "texto": "={{ $('Buscar Cliente').item.json.texto }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "10ab6055-c2a4-47c8-b068-23897b6686ae",
+      "name": "Preparar Respuesta Otro",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [2144, 1072],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-otro", "name": "texto", "value": "Hola! Soy el asistente de la veterinaria. Puedo ayudarte a sacar un turno, contarte el historial clinico de tu mascota, o evaluar un sintoma. En que te ayudo?", "type": "string" },
+            { "id": "telefono-otro", "name": "telefono", "value": "={{ $('Buscar Cliente').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-otro", "name": "cliente_id", "value": "={{ $('Buscar Cliente').item.json.cliente_id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c68f1235-c53a-4350-afce-b74133d272a3",
+      "name": "Responder Otro",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2368, 1072],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0767267f-b6ac-461d-9c9b-de7271bc522a",
+      "name": "Crear Cliente Nuevo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1120, 1072],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO clientes (nombre, telefono) VALUES ($1, $2) RETURNING id",
+        "options": { "queryReplacement": "={{ [$json.telefono, $json.telefono] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "93adb57e-a28a-4d66-8daf-a31325b1d0ce",
+      "name": "Crear Conversacion Registro",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [1344, 1072],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO conversaciones (cliente_id, estado, contexto) VALUES ($1, 'esperando_datos_registro', $2::jsonb)",
+        "options": { "queryReplacement": "={{ [$json.id, JSON.stringify({ paso: 'nombre_dueno', datos: {} })] }}" }
+      },
+      "credentials": { "postgres": { "name": "Supabase Postgres" } }
+    },
+    {
+      "id": "a17f06cc-28e7-4926-9c99-e8cb0a0ac3bd",
+      "name": "Preparar Pregunta Alta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [1632, 1072],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            { "id": "texto-alta", "name": "texto", "value": "Hola! 🐾 Soy el asistente virtual de la veterinaria. Para darte de alta como cliente, decime: cual es tu nombre?", "type": "string" },
+            { "id": "telefono-alta", "name": "telefono", "value": "={{ $('Buscar Cliente').item.json.telefono }}", "type": "string" },
+            { "id": "cliente-id-alta", "name": "cliente_id", "value": "={{ $('Crear Cliente Nuevo').item.json.id }}", "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ec455bb5-3faf-4905-820c-3fc7a5f02c8d",
+      "name": "Responder Pregunta Alta",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1920, 1072],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "dXu7S5atkZfbcZrw", "cachedResultName": "00 - Enviar WhatsApp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "telefono": "={{ $json.telefono }}", "texto": "={{ $json.texto }}", "cliente_id": "={{ $json.cliente_id }}" },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "telefono", "displayName": "telefono", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "texto", "displayName": "texto", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "cliente_id", "displayName": "cliente_id", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ccdf8d7d-b4c6-4b6d-8152-ed482c4049b2",
+      "name": "Sticky Note f96763b2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1568, 1072],
+      "parameters": {
+        "content": "## Pendiente de Dev 2\n\nLas ramas de estado `esperando_confirmacion_turno`, `esperando_eleccion_horario` y `esperando_respuesta_seguimiento` hoy responden con un mensaje generico. Reemplazar por `Execute Workflow` a los wf 04/05/06 de Dev 2 cuando esten publicados. Ver docs/contrato-dev1-dev2.md.",
+        "color": 5
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Evolution": { "main": [[{ "node": "Normalizar Mensaje", "type": "main", "index": 0 }]] },
+    "Normalizar Mensaje": { "main": [[{ "node": "Registrar Mensaje Entrante", "type": "main", "index": 0 }]] },
+    "Registrar Mensaje Entrante": { "main": [[{ "node": "Buscar Cliente", "type": "main", "index": 0 }]] },
+    "Buscar Cliente": { "main": [[{ "node": "Cliente Existe?", "type": "main", "index": 0 }]] },
+    "Cliente Existe?": {
+      "main": [
+        [{ "node": "Buscar Conversacion", "type": "main", "index": 0 }],
+        [{ "node": "Crear Cliente Nuevo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Buscar Conversacion": { "main": [[{ "node": "Router por Estado", "type": "main", "index": 0 }]] },
+    "Router por Estado": {
+      "main": [
+        [{ "node": "Procesar Paso Registro", "type": "main", "index": 0 }],
+        [{ "node": "Continuar Eleccion de Mascota (wf03)", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Mensaje Pendiente (Dev2)", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Mensaje Pendiente (Dev2)", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Mensaje Pendiente (Dev2)", "type": "main", "index": 0 }],
+        [{ "node": "Clasificar Intencion", "type": "main", "index": 0 }],
+        [{ "node": "Clasificar Intencion", "type": "main", "index": 0 }]
+      ]
+    },
+    "Procesar Paso Registro": { "main": [[{ "node": "Registro Completo?", "type": "main", "index": 0 }]] },
+    "Registro Completo?": {
+      "main": [
+        [{ "node": "Insertar Mascota", "type": "main", "index": 0 }],
+        [{ "node": "Actualizar Contexto Registro", "type": "main", "index": 0 }]
+      ]
+    },
+    "Insertar Mascota": { "main": [[{ "node": "Actualizar Nombre Cliente", "type": "main", "index": 0 }]] },
+    "Actualizar Nombre Cliente": { "main": [[{ "node": "Backfill Mensajes", "type": "main", "index": 0 }]] },
+    "Backfill Mensajes": { "main": [[{ "node": "Cerrar Conversacion Registro", "type": "main", "index": 0 }]] },
+    "Cerrar Conversacion Registro": { "main": [[{ "node": "Preparar Bienvenida", "type": "main", "index": 0 }]] },
+    "Preparar Bienvenida": { "main": [[{ "node": "Responder Bienvenida", "type": "main", "index": 0 }]] },
+    "Actualizar Contexto Registro": { "main": [[{ "node": "Preparar Pregunta Siguiente", "type": "main", "index": 0 }]] },
+    "Preparar Pregunta Siguiente": { "main": [[{ "node": "Responder Pregunta Siguiente", "type": "main", "index": 0 }]] },
+    "Preparar Mensaje Pendiente (Dev2)": { "main": [[{ "node": "Responder Pendiente (Dev2)", "type": "main", "index": 0 }]] },
+    "Clasificar Intencion": { "main": [[{ "node": "Router por Intencion", "type": "main", "index": 0 }]] },
+    "Google Gemini - Intencion": { "ai_languageModel": [[{ "node": "Clasificar Intencion", "type": "ai_languageModel", "index": 0 }]] },
+    "Parser Intencion": { "ai_outputParser": [[{ "node": "Clasificar Intencion", "type": "ai_outputParser", "index": 0 }]] },
+    "Router por Intencion": {
+      "main": [
+        [{ "node": "Preparar Respuesta Turno Directo", "type": "main", "index": 0 }],
+        [{ "node": "Consultar Historial (wf03)", "type": "main", "index": 0 }],
+        [{ "node": "Triaje de Sintomas (wf02)", "type": "main", "index": 0 }],
+        [{ "node": "Preparar Respuesta Otro", "type": "main", "index": 0 }]
+      ]
+    },
+    "Preparar Respuesta Turno Directo": { "main": [[{ "node": "Responder Turno Directo", "type": "main", "index": 0 }]] },
+    "Preparar Respuesta Otro": { "main": [[{ "node": "Responder Otro", "type": "main", "index": 0 }]] },
+    "Crear Cliente Nuevo": { "main": [[{ "node": "Crear Conversacion Registro", "type": "main", "index": 0 }]] },
+    "Crear Conversacion Registro": { "main": [[{ "node": "Preparar Pregunta Alta", "type": "main", "index": 0 }]] },
+    "Preparar Pregunta Alta": { "main": [[{ "node": "Responder Pregunta Alta", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "meta": {
+    "n8nWorkflowId": "IFgEZ5HkY22VE6RO",
+    "instanceUrl": "https://josefranciscoarce.app.n8n.cloud"
+  }
+}

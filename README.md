@@ -110,8 +110,10 @@ Detalle campo por campo, con el porqué de cada uno, en
 ## Estructura del repo
 
 ```
-docs/       arquitectura completa, división de tareas y el flujo end-to-end en HTML
-workflows/  workflows de n8n
+docs/       arquitectura completa, división de tareas, flujo end-to-end en HTML
+            y el seguimiento de trabajo de Dev 1 (plan, estado, contrato, to-do)
+workflows/  workflows de n8n exportados como JSON, con guía de import/credenciales
+evolution/  infra local de Evolution API (WhatsApp) vía Docker Compose + túnel
 panel/      panel React — ver panel/README.md para arrancarlo
 ```
 
@@ -126,11 +128,42 @@ panel/      panel React — ver panel/README.md para arrancarlo
 - [`docs/vetbot-flujo-completo.html`](docs/vetbot-flujo-completo.html) —
   diagrama del recorrido end-to-end, de un mensaje de WhatsApp hasta el turno
   agendado.
+- [`docs/dev1-plan.md`](docs/dev1-plan.md) — plan de ejecución de Dev 1
+  (Evolution API + workflows 00/01/02/03/08) contra el schema real de
+  Supabase, con los choques que corrigió respecto del diseño original.
+- [`docs/dev1-estado.md`](docs/dev1-estado.md) — foto del terreno al cierre de
+  esa sesión: qué quedó levantado, IDs de los workflows en n8n, qué falta.
+- [`docs/contrato-dev1-dev2.md`](docs/contrato-dev1-dev2.md) — cambios de
+  schema aplicados sobre tablas compartidas y el contrato de datos entre el
+  wf 02 (Dev 1) y el wf 04 (Dev 2).
+- [`docs/todo.md`](docs/todo.md) — pendientes activos de Dev 1 (teléfono del
+  veterinario, publicar workflows, escanear el QR, integrar wf 04/05 de Dev 2).
+- [`workflows/workflows.md`](workflows/workflows.md) — qué hace cada workflow,
+  orden de import, credenciales a completar a mano y simplificaciones a revisar.
+- [`evolution/README.md`](evolution/README.md) — arranque de Evolution API,
+  manejo del túnel cloudflared y seteo del webhook hacia n8n.
 - [`panel/README.md`](panel/README.md) — arranque, rutas y convenciones del
   frontend.
 
 ## Estado
 
-En construcción. El panel está en estado template: routing, layout, tipos y
-capa de datos armados, con las pantallas por implementar (cada página lleva su
-contrato documentado arriba de todo).
+En construcción, por partes.
+
+**Conversación e IA (Dev 1)** — Evolution API corriendo en Docker con túnel
+`cloudflared`, migración de Supabase aplicada, y 5 workflows (`00`, `01`,
+`02`, `03`, `08`) construidos, validados y exportados a `workflows/`, todavía
+en borrador (`active: false`) en n8n. Falta: cargar la API key de Gemini,
+publicar los workflows, escanear el QR de WhatsApp y correr la batería de
+verificación completa — detalle en [`docs/todo.md`](docs/todo.md).
+
+**Agenda y datos (Dev 2)** — `04-ofrecer-turno.json` y `05-confirmacion-turno.json`
+entregados como JSON, todavía sin integrar a la instancia de n8n de Dev 1 (
+patrón de trigger distinto, credenciales propias, nodo de respuesta por
+WhatsApp sin conectar). Hasta resolverlo, el router responde con un mensaje
+genérico en esas ramas — detalle en
+[`workflows/workflows.md`](workflows/workflows.md) y
+[`docs/contrato-dev1-dev2.md`](docs/contrato-dev1-dev2.md).
+
+**Panel** — en estado template: routing, layout, tipos y capa de datos
+armados, con las pantallas por implementar (cada página lleva su contrato
+documentado arriba de todo).
