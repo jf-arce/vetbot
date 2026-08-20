@@ -5,6 +5,7 @@ import { DashboardPage } from '@/pages/dashboard/DashboardPage'
 import { TurnosPage } from '@/pages/turnos/TurnosPage'
 import { MascotasPage } from '@/pages/mascotas/MascotasPage'
 import { MascotaDetallePage } from '@/pages/mascotas/MascotaDetallePage'
+import { MascotaEditarPage } from '@/pages/mascotas/MascotaEditarPage'
 import { AlertasPage } from '@/pages/alertas/AlertasPage'
 import { SeguimientosPage } from '@/pages/seguimientos/SeguimientosPage'
 import { ConversacionesPage } from '@/pages/conversaciones/ConversacionesPage'
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="mascotas">
           <Route index element={<MascotasPage />} />
           <Route path=":mascotaId" element={<MascotaDetallePage />} />
+          <Route path=":mascotaId/editar" element={<MascotaEditarPage />} />
         </Route>
 
         <Route path="alertas" element={<AlertasPage />} />

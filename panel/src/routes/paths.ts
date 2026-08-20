@@ -24,6 +24,11 @@ export function rutaMascota(mascotaId: number | string): string {
   return `${RUTAS.mascotas}/${mascotaId}`
 }
 
+/** Formulario de edición del perfil de una mascota. */
+export function rutaEditarMascota(mascotaId: number | string): string {
+  return `${rutaMascota(mascotaId)}/editar`
+}
+
 /** Hilo completo de WhatsApp de un cliente. */
 export function rutaConversacion(clienteId: number | string): string {
   return `${RUTAS.conversaciones}/${clienteId}`

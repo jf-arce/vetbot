@@ -1,9 +1,8 @@
-import { Link, useParams } from 'react-router'
+import { Link } from 'react-router'
 import { ArrowLeftIcon } from 'lucide-react'
 
-import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
+import { MascotaView } from '@/features/mascotas/components/MascotaView'
 import { RUTAS } from '@/routes/paths'
 
 /**
@@ -40,31 +39,22 @@ import { RUTAS } from '@/routes/paths'
  * ───────────────────────────────────────────────────────────────────────────
  */
 export function MascotaDetallePage() {
-  const { mascotaId } = useParams()
-
   return (
-    <>
-      <PageHeader
-        titulo="Ficha de la mascota"
-        descripcion={`Historia clínica, turnos y recordatorios · mascota #${mascotaId}`}
-        acciones={
-          // `nativeButton={false}`: Base UI necesita saber que el render
-          // devuelve un <a> (el Link) y no un <button> nativo.
-          <Button
-            variant="outline"
-            size="sm"
-            nativeButton={false}
-            render={<Link to={RUTAS.mascotas} />}
-          >
-            <ArrowLeftIcon />
-            Volver
-          </Button>
-        }
-      />
-      <EmptyState
-        titulo="Ficha sin implementar"
-        descripcion="Ver el contrato del módulo en el comentario de src/pages/mascotas/MascotaDetallePage.tsx"
-      />
-    </>
+    <div className="flex flex-col gap-2">
+      <div className="px-6 pt-4">
+        {/* `nativeButton={false}`: Base UI necesita saber que el render
+            devuelve un <a> (el Link) y no un <button> nativo. */}
+        <Button
+          variant="outline"
+          size="sm"
+          nativeButton={false}
+          render={<Link to={RUTAS.mascotas} />}
+        >
+          <ArrowLeftIcon />
+          Volver
+        </Button>
+      </div>
+      <MascotaView />
+    </div>
   )
 }

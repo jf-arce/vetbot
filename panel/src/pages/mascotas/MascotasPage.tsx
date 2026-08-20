@@ -1,5 +1,4 @@
-import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/common/EmptyState'
+import { MascotasListView } from '@/features/mascotas/components/MascotasListView'
 
 /**
  * ─── CONTRATO DEL MÓDULO ───────────────────────────────────────────────────
@@ -22,16 +21,5 @@ import { EmptyState } from '@/components/common/EmptyState'
  * ───────────────────────────────────────────────────────────────────────────
  */
 export function MascotasPage() {
-  return (
-    <>
-      <PageHeader
-        titulo="Mascotas"
-        descripcion="Pacientes registrados y sus dueños"
-      />
-      <EmptyState
-        titulo="Mascotas sin implementar"
-        descripcion="Ver el contrato del módulo en el comentario de src/pages/mascotas/MascotasPage.tsx"
-      />
-    </>
-  )
+  return <MascotasListView />
 }
