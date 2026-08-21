@@ -15,7 +15,7 @@ export async function listarUltimosMensajes(
     await getSupabase()
       .from('mensajes')
       .select('*, cliente:clientes(id, nombre, telefono)')
-      .order('timestamp', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(limite),
   )
 }
@@ -28,19 +28,19 @@ export async function listarUltimosMensajes(
  */
 
 /** Hilo completo de un cliente, en orden cronológico. */
-export async function listarMensajesDeCliente(clienteId: number): Promise<Mensaje[]> {
+export async function listarMensajesDeCliente(clienteId: string): Promise<Mensaje[]> {
   return desempaquetar(
     await getSupabase()
       .from('mensajes')
       .select('*')
       .eq('cliente_id', clienteId)
-      .order('timestamp', { ascending: true }),
+      .order('created_at', { ascending: true }),
   )
 }
 
 /** Estado actual de la conversación (qué está esperando el bot de ese cliente). */
 export async function obtenerConversacion(
-  clienteId: number,
+  clienteId: string,
 ): Promise<Conversacion | null> {
   return desempaquetar(
     await getSupabase()
@@ -51,7 +51,7 @@ export async function obtenerConversacion(
   )
 }
 
-export async function obtenerCliente(clienteId: number): Promise<Cliente> {
+export async function obtenerCliente(clienteId: string): Promise<Cliente> {
   return desempaquetar(
     await getSupabase().from('clientes').select('*').eq('id', clienteId).single(),
   )

@@ -1,5 +1,4 @@
-import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/common/EmptyState'
+import { AlertasView } from '@/features/alertas/components/AlertasView'
 
 /**
  * ─── CONTRATO DEL MÓDULO ───────────────────────────────────────────────────
@@ -33,16 +32,5 @@ import { EmptyState } from '@/components/common/EmptyState'
  * ───────────────────────────────────────────────────────────────────────────
  */
 export function AlertasPage() {
-  return (
-    <>
-      <PageHeader
-        titulo="Alertas"
-        descripcion="Casos de urgencia alta derivados por el triaje del bot"
-      />
-      <EmptyState
-        titulo="Alertas sin implementar"
-        descripcion="Ver el contrato del módulo en el comentario de src/pages/alertas/AlertasPage.tsx"
-      />
-    </>
-  )
+  return <AlertasView />
 }

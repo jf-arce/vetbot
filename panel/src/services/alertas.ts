@@ -31,7 +31,7 @@ export async function listarAlertas(
 
 /** Marca la alerta como atendida. `atendidoPor` es texto libre por ahora. */
 export async function marcarAlertaAtendida(
-  alertaId: number,
+  alertaId: string,
   atendidoPor: string,
 ): Promise<void> {
   desempaquetar(

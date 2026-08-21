@@ -54,7 +54,7 @@ export async function listarProximosTurnos(opciones?: {
 
 /** Historial de turnos de una mascota, del más nuevo al más viejo. */
 export async function listarTurnosDeMascota(
-  mascotaId: number,
+  mascotaId: string,
 ): Promise<TurnoDetallado[]> {
   return desempaquetar(
     await getSupabase()
@@ -67,7 +67,7 @@ export async function listarTurnosDeMascota(
 
 /** Cambio de estado que NO toca Google Calendar (ej: marcar "atendido"). */
 export async function actualizarEstadoTurno(
-  turnoId: number,
+  turnoId: string,
   estado: EstadoTurno,
 ): Promise<void> {
   desempaquetar(
@@ -90,7 +90,7 @@ export async function actualizarEstadoTurno(
  *
  * Ver la tabla "quién habla con quién" en docs/vetbot-division-tareas.md.
  */
-export async function cancelarTurno(turnoId: number, motivo?: string): Promise<void> {
+export async function cancelarTurno(turnoId: string, motivo?: string): Promise<void> {
   throw new Error(
     `TODO: cancelar turno ${turnoId}${motivo ? ` (${motivo})` : ''} vía webhook de n8n`,
   )

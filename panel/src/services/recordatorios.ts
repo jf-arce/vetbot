@@ -28,7 +28,7 @@ export async function listarRecordatoriosProximos(
 }
 
 export async function listarRecordatoriosDeMascota(
-  mascotaId: number,
+  mascotaId: string,
 ): Promise<Recordatorio[]> {
   return desempaquetar(
     await getSupabase()
@@ -44,6 +44,6 @@ export async function listarRecordatoriosDeMascota(
  * contra Supabase: es un POST al webhook que exponga n8n (mismo criterio que
  * `cancelarTurno` en `services/turnos.ts`).
  */
-export async function reenviarRecordatorio(recordatorioId: number): Promise<void> {
+export async function reenviarRecordatorio(recordatorioId: string): Promise<void> {
   throw new Error(`TODO: reenviar recordatorio ${recordatorioId} vía webhook de n8n`)
 }

@@ -22,7 +22,7 @@ export async function listarMascotas(busqueda?: string): Promise<MascotaConDueno
   return desempaquetar(await query)
 }
 
-export async function obtenerMascota(mascotaId: number): Promise<MascotaConDueno> {
+export async function obtenerMascota(mascotaId: string): Promise<MascotaConDueno> {
   return desempaquetar(
     await getSupabase()
       .from('mascotas')
@@ -33,7 +33,7 @@ export async function obtenerMascota(mascotaId: number): Promise<MascotaConDueno
 }
 
 export async function listarMascotasDeCliente(
-  clienteId: number,
+  clienteId: string,
 ): Promise<MascotaConDueno[]> {
   return desempaquetar(
     await getSupabase()

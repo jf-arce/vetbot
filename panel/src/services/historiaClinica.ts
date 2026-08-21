@@ -8,11 +8,11 @@ import type { HistoriaClinica } from '@/types/db'
 
 /** Entradas de historia clínica de una mascota, de la más nueva a la más vieja. */
 export async function listarHistoriaClinica(
-  mascotaId: number,
+  mascotaId: string,
 ): Promise<HistoriaClinica[]> {
   return desempaquetar(
     await getSupabase()
-      .from('historia_clinica')
+      .from('historias_clinicas')
       .select('*')
       .eq('mascota_id', mascotaId)
       .order('fecha', { ascending: false }),
@@ -24,11 +24,11 @@ export async function listarHistoriaClinica(
  * Solo las entradas que registraron peso.
  */
 export async function listarEvolucionPeso(
-  mascotaId: number,
+  mascotaId: string,
 ): Promise<Pick<HistoriaClinica, 'fecha' | 'peso_registrado'>[]> {
   return desempaquetar(
     await getSupabase()
-      .from('historia_clinica')
+      .from('historias_clinicas')
       .select('fecha, peso_registrado')
       .eq('mascota_id', mascotaId)
       .not('peso_registrado', 'is', null)

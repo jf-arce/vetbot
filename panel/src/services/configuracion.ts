@@ -22,7 +22,7 @@ export async function listarHorarios(): Promise<HorarioAtencion[]> {
 }
 
 export async function actualizarHorario(
-  id: number,
+  id: string,
   cambios: Partial<Omit<HorarioAtencion, 'id'>>,
 ): Promise<void> {
   desempaquetar(
@@ -51,7 +51,7 @@ export async function crearExcepcion(
   desempaquetar(await getSupabase().from('excepciones_horario').insert(excepcion))
 }
 
-export async function eliminarExcepcion(id: number): Promise<void> {
+export async function eliminarExcepcion(id: string): Promise<void> {
   desempaquetar(await getSupabase().from('excepciones_horario').delete().eq('id', id))
 }
 
