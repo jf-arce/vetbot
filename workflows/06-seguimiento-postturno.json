@@ -1,0 +1,246 @@
+{
+  "name": "WF06 - Seguimiento post-turno",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e795da75-1213-44e7-b591-6a6e4845f22e",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "turnos",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "estado",
+              "condition": "eq",
+              "keyValue": "atendido"
+            },
+            {
+              "keyName": "fecha_hora",
+              "condition": "eq",
+              "keyValue": "={{ DateTime.now().minus({hours: 48}).toISO() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "b1824824-2fd5-4d15-81d2-c0d363347f3e",
+      "name": "Buscar turnos 48hs",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "seguimientos",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "turno_id",
+              "fieldValue": "={{ $json.id }}"
+            },
+            {
+              "fieldId": "fecha_programada",
+              "fieldValue": "={{ DateTime.now().toISODate() }}"
+            },
+            {
+              "fieldId": "estado",
+              "fieldValue": "pendiente"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "16cf8f69-ef3d-4c1a-88d9-75bc3920213b",
+      "name": "Crear seguimiento",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "clientes",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $('Buscar turnos 48hs').item.json.cliente_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "id": "b1188f9d-62a8-4008-b258-e08c23695ef8",
+      "name": "Buscar telefono cliente",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bTFoiJEz1Y0Oobci",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/bTFoiJEz1Y0Oobci",
+          "cachedResultName": "00 - Enviar WhatsApp"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $json.telefono }}",
+            "texto": "=={{ '🐾 Hola! Queríamos saber cómo sigue ' + $('Buscar turnos 48hs').item.json.motivo + ' después de su visita. ¿Cómo está?' }}",
+            "cliente_id": "={{ $json.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "texto",
+              "displayName": "texto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "cliente_id",
+              "displayName": "cliente_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        0
+      ],
+      "id": "672e4925-b7df-4b33-963c-aceab1d145ee",
+      "name": "Enviar seguimiento por WhatsApp"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Buscar turnos 48hs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar turnos 48hs": {
+      "main": [
+        [
+          {
+            "node": "Crear seguimiento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear seguimiento": {
+      "main": [
+        [
+          {
+            "node": "Buscar telefono cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar telefono cliente": {
+      "main": [
+        [
+          {
+            "node": "Enviar seguimiento por WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "17a9882d-4852-4dda-9609-333cd4f55933",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "88095b30e46cbe9b7f66a9fb873080bcfecd7169ff5ae40e455d4f79c48be0f6"
+  },
+  "nodeGroups": [],
+  "id": "7LBB7nxBKPLQIycd",
+  "tags": []
+}

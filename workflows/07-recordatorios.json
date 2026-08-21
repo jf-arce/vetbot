@@ -1,0 +1,292 @@
+{
+  "name": "WF07 - Recordatorios",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 21
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "86266e18-c0a0-49fd-bae8-7b597718408f",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "recordatorios",
+        "returnAll": true,
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "enviado",
+              "condition": "eq",
+              "keyValue": "false"
+            },
+            {
+              "keyName": "fecha_vencimiento",
+              "condition": "lte",
+              "keyValue": "={{ DateTime.now().plus({days: 7}).toISODate() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
+      "id": "4ef727a3-cd5d-4707-9313-fdb9a74c4b61",
+      "name": "Buscar recordatorios pendientes",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "recordatorios",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "enviado",
+              "fieldValue": "true"
+            },
+            {
+              "fieldId": "fecha_envio",
+              "fieldValue": "={{ DateTime.now().toISO() }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "0b18f726-2c10-4f20-8a56-0603220a7a6d",
+      "name": "Marcar recordatorio enviado",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "mascotas",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $json.mascota_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "53d80e1f-9cd8-45e0-add2-611f510429fc",
+      "name": "Buscar mascota",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "clientes",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $json.cliente_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "id": "885b04fd-3936-4a1e-9191-1935a1cc3d20",
+      "name": "Buscar telefono cliente",
+      "credentials": {
+        "supabaseApi": {
+          "id": "YJvImtZJpajdLOqL",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bTFoiJEz1Y0Oobci",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/bTFoiJEz1Y0Oobci",
+          "cachedResultName": "00 - Enviar WhatsApp"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $json.telefono }}",
+            "texto": "=={{ '🐾 Hola ' + $json.nombre + '! Te recordamos que ' + $('Buscar mascota').item.json.nombre + ' tiene pendiente: ' + $('Buscar recordatorios pendientes').item.json.tipo + ' (vence el ' + $('Buscar recordatorios pendientes').item.json.fecha_vencimiento + '). ¡Coordiná tu turno!' }}",
+            "cliente_id": "={{ $json.id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "texto",
+              "displayName": "texto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "cliente_id",
+              "displayName": "cliente_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        0
+      ],
+      "id": "3227ec40-216e-422b-9706-a910535970cd",
+      "name": "Enviar recordatorio por WhatsApp"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Buscar recordatorios pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar recordatorios pendientes": {
+      "main": [
+        [
+          {
+            "node": "Buscar mascota",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar mascota": {
+      "main": [
+        [
+          {
+            "node": "Buscar telefono cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar telefono cliente": {
+      "main": [
+        [
+          {
+            "node": "Enviar recordatorio por WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar recordatorio por WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Marcar recordatorio enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "6c3f4b68-915e-4800-9c6f-f3dd0543b663",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "88095b30e46cbe9b7f66a9fb873080bcfecd7169ff5ae40e455d4f79c48be0f6"
+  },
+  "nodeGroups": [],
+  "id": "42eare3qg7HiS00k",
+  "tags": []
+}

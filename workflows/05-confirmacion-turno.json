@@ -133,16 +133,63 @@
     },
     {
       "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bTFoiJEz1Y0Oobci",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/bTFoiJEz1Y0Oobci",
+          "cachedResultName": "00 - Enviar WhatsApp"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Webhook').first().json.body.telefono }}",
+            "texto": "=={{ 'Tu turno está confirmado para ' + DateTime.fromISO($('Webhook').first().json.body.slot_elegido).toLocaleString({weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit'}) + '. ¡Te esperamos!' }}",
+            "cliente_id": "={{ $('Webhook').first().json.body.cliente_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "texto",
+              "displayName": "texto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "cliente_id",
+              "displayName": "cliente_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
         "options": {}
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.5,
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
       "position": [
         896,
         0
       ],
-      "id": "2d151fdc-483c-45da-9b47-754a6d252dc2",
-      "name": "HTTP Request"
+      "id": "0f1d6174-433b-48eb-b9de-02f29754033f",
+      "name": "Confirmar turno por WhatsApp"
     }
   ],
   "pinData": {},
@@ -184,7 +231,7 @@
       "main": [
         [
           {
-            "node": "HTTP Request",
+            "node": "Confirmar turno por WhatsApp",
             "type": "main",
             "index": 0
           }
@@ -198,7 +245,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "5993eb1c-f50b-457c-8fee-eb52e86bbd3e",
+  "versionId": "b963dd7b-e03c-4421-b483-52777db5270b",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "88095b30e46cbe9b7f66a9fb873080bcfecd7169ff5ae40e455d4f79c48be0f6"

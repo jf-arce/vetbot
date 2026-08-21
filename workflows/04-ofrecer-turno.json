@@ -172,16 +172,63 @@
     },
     {
       "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bTFoiJEz1Y0Oobci",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/bTFoiJEz1Y0Oobci",
+          "cachedResultName": "00 - Enviar WhatsApp"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telefono": "={{ $('Webhook').first().json.body.telefono }}",
+            "texto": "=={{ 'Estos son los turnos disponibles:\\n' + $('Calcular slots libres').all().map((s, i) => (i+1) + '. ' + s.json.label).join('\\n') + '\\n\\nRespondé con el número de tu preferencia.' }}",
+            "cliente_id": "={{ $('Webhook').first().json.body.cliente_id }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telefono",
+              "displayName": "telefono",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "texto",
+              "displayName": "texto",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "cliente_id",
+              "displayName": "cliente_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
         "options": {}
       },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.5,
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
       "position": [
         1280,
         -16
       ],
-      "id": "b25177a2-56dc-4463-ac54-c03fac64e4fe",
-      "name": "HTTP Request"
+      "id": "10a38be4-4759-48b4-84bc-74fc4021da79",
+      "name": "Enviar slots por WhatsApp"
     }
   ],
   "pinData": {},
@@ -277,7 +324,7 @@
       "main": [
         [
           {
-            "node": "HTTP Request",
+            "node": "Enviar slots por WhatsApp",
             "type": "main",
             "index": 0
           }
@@ -291,7 +338,7 @@
     "binaryMode": "separate",
     "availableInMCP": true
   },
-  "versionId": "158d1d23-402a-4e2e-8b49-fc2ee6d46611",
+  "versionId": "5a06dd38-07f8-4634-8762-9bf4115a2ca4",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "88095b30e46cbe9b7f66a9fb873080bcfecd7169ff5ae40e455d4f79c48be0f6"
