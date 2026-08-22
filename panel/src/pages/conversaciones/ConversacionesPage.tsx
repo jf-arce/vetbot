@@ -1,5 +1,5 @@
 import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/common/EmptyState'
+import { ConversacionesView } from '@/features/conversaciones/components/ConversacionesView'
 
 /**
  * ─── CONTRATO DEL MÓDULO ───────────────────────────────────────────────────
@@ -30,10 +30,7 @@ export function ConversacionesPage() {
         titulo="Conversaciones"
         descripcion="Últimos mensajes intercambiados entre los dueños y el bot"
       />
-      <EmptyState
-        titulo="Conversaciones sin implementar"
-        descripcion="Ver el contrato del módulo en el comentario de src/pages/conversaciones/ConversacionesPage.tsx"
-      />
+      <ConversacionesView />
     </>
   )
 }

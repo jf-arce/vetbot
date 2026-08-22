@@ -46,7 +46,7 @@ export async function listarExcepciones(
 }
 
 export async function crearExcepcion(
-  excepcion: Omit<ExcepcionHorario, 'id'>,
+  excepcion: Omit<ExcepcionHorario, 'id' | 'created_at'>,
 ): Promise<void> {
   desempaquetar(await getSupabase().from('excepciones_horario').insert(excepcion))
 }

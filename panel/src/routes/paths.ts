@@ -17,6 +17,10 @@ export const RUTAS = {
   configuracionHorarios: '/configuracion/horarios',
   configuracionExcepciones: '/configuracion/excepciones',
   configuracionGeneral: '/configuracion/general',
+  configuracionApariencia: '/configuracion/apariencia',
+  configuracionPerfil: '/configuracion/perfil',
+  configuracionSeguridad: '/configuracion/seguridad',
+  configuracionPreferencias: '/configuracion/preferencias',
 } as const
 
 /** Ficha de una mascota + su historia clínica. */

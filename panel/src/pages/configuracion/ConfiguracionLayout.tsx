@@ -14,6 +14,10 @@ const TABS = [
   { titulo: 'Horarios', ruta: RUTAS.configuracionHorarios },
   { titulo: 'Excepciones', ruta: RUTAS.configuracionExcepciones },
   { titulo: 'General', ruta: RUTAS.configuracionGeneral },
+  { titulo: 'Apariencia', ruta: RUTAS.configuracionApariencia },
+  { titulo: 'Perfil', ruta: RUTAS.configuracionPerfil },
+  { titulo: 'Seguridad', ruta: RUTAS.configuracionSeguridad },
+  { titulo: 'Preferencias del Bot', ruta: RUTAS.configuracionPreferencias },
 ]
 
 export function ConfiguracionLayout() {
@@ -24,7 +28,7 @@ export function ConfiguracionLayout() {
         descripcion="Horarios de atención, feriados y parámetros que usa el bot para ofrecer turnos"
       />
 
-      <nav className="bg-muted text-muted-foreground inline-flex w-fit items-center gap-1 rounded-lg p-1">
+      <nav className="bg-muted text-muted-foreground inline-flex w-fit flex-wrap items-center gap-1 rounded-lg p-1">
         {TABS.map((tab) => (
           <NavLink
             key={tab.ruta}

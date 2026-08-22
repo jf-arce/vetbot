@@ -14,6 +14,10 @@ import { ConfiguracionLayout } from '@/pages/configuracion/ConfiguracionLayout'
 import { HorariosPage } from '@/pages/configuracion/HorariosPage'
 import { ExcepcionesPage } from '@/pages/configuracion/ExcepcionesPage'
 import { GeneralPage } from '@/pages/configuracion/GeneralPage'
+import { AparienciaPage } from '@/pages/configuracion/AparienciaPage'
+import { PerfilPage } from '@/pages/configuracion/PerfilPage'
+import { SeguridadPage } from '@/pages/configuracion/SeguridadPage'
+import { PreferenciasPage } from '@/pages/configuracion/PreferenciasPage'
 import { NotFoundPage } from '@/pages/NotFoundPage'
 import { RUTAS } from '@/routes/paths'
 
@@ -65,6 +69,10 @@ export default function App() {
           <Route path="horarios" element={<HorariosPage />} />
           <Route path="excepciones" element={<ExcepcionesPage />} />
           <Route path="general" element={<GeneralPage />} />
+          <Route path="apariencia" element={<AparienciaPage />} />
+          <Route path="perfil" element={<PerfilPage />} />
+          <Route path="seguridad" element={<SeguridadPage />} />
+          <Route path="preferencias" element={<PreferenciasPage />} />
         </Route>
 
         <Route path="*" element={<NotFoundPage />} />

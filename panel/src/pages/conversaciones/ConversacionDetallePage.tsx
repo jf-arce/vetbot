@@ -2,8 +2,8 @@ import { Link, useParams } from 'react-router'
 import { ArrowLeftIcon } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/PageHeader'
-import { EmptyState } from '@/components/common/EmptyState'
 import { Button } from '@/components/ui/button'
+import { ConversacionesView } from '@/features/conversaciones/components/ConversacionesView'
 import { RUTAS } from '@/routes/paths'
 
 /**
@@ -11,7 +11,8 @@ import { RUTAS } from '@/routes/paths'
  *
  * Qué es: el hilo completo de WhatsApp de un cliente, estilo chat.
  *
- * Param de ruta: `:clienteId` (string → Number()).
+ * Param de ruta: `:clienteId` — string, es el `uuid` real de `clientes.id`
+ * (no se convierte a número).
  *
  * Datos: `services/mensajes.ts`
  *   · obtenerCliente(clienteId)         → nombre y teléfono del encabezado
@@ -22,9 +23,10 @@ import { RUTAS } from '@/routes/paths'
  * Qué mostrar:
  *   · Burbujas alineadas por `direccion`: entrante (dueño) a la izquierda,
  *     saliente (bot) a la derecha. Separadores por día.
- *   · Badge con el estado de la conversación: libre, esperando_eleccion_horario,
- *     esperando_confirmacion_turno, esperando_datos_registro,
- *     esperando_respuesta_seguimiento. Es lo que explica por qué el bot está
+ *   · Badge con el estado de la conversación (6 valores reales del enum):
+ *     libre, esperando_confirmacion_turno, esperando_eleccion_horario,
+ *     esperando_datos_registro, esperando_respuesta_seguimiento,
+ *     esperando_eleccion_mascota. Es lo que explica por qué el bot está
  *     "esperando" algo, y es lo primero que se mira cuando una charla se trabó.
  *   · `conversacion.contexto` (JSON) en un bloque colapsable — es data de debug
  *     útil cuando un flujo multi-paso quedó a medias.
@@ -43,7 +45,7 @@ export function ConversacionDetallePage() {
     <>
       <PageHeader
         titulo="Conversación"
-        descripcion={`Hilo completo y estado del bot · cliente #${clienteId}`}
+        descripcion="Hilo completo y estado del bot"
         acciones={
           <Button
             variant="outline"
@@ -56,10 +58,7 @@ export function ConversacionDetallePage() {
           </Button>
         }
       />
-      <EmptyState
-        titulo="Hilo sin implementar"
-        descripcion="Ver el contrato del módulo en el comentario de src/pages/conversaciones/ConversacionDetallePage.tsx"
-      />
+      <ConversacionesView clienteId={clienteId} />
     </>
   )
 }

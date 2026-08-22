@@ -270,7 +270,7 @@ export interface ConfiguracionGeneral {
   valor: string
 }
 
-/** Claves usadas por los workflows hasta ahora (wf 04). */
+/** Claves usadas por los workflows hasta ahora (wf 04), más las que edita el panel en Configuración → Perfil. */
 export type ClaveConfiguracion =
   /** Tamaño de cada bloque al calcular huecos libres. Ej: "30". */
   | 'duracion_turno_minutos'
@@ -278,6 +278,10 @@ export type ClaveConfiguracion =
   | 'dias_anticipacion'
   /** Cuántas opciones de horario se ofrecen por mensaje. Ej: "4". */
   | 'turnos_a_mostrar'
+  /** A quién le llega la alerta urgente (wf 08). Hoy en `<a completar>` — pendiente real de Dev 1. */
+  | 'telefono_veterinario'
+  /** Nombre de la clínica, para mostrar en el panel. No lo usa ningún workflow todavía. */
+  | 'nombre_clinica'
 
 // ---------------------------------------------------------------------------
 // Tipos compuestos (lo que devuelven los joins de `src/services/`)
